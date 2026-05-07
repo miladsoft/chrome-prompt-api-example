@@ -5,6 +5,7 @@ const options = {
 
 let session = null;
 let activePromptController = null;
+let rawOutput = "Create a session, then send a prompt.";
 
 const checkButton = document.querySelector("#checkButton");
 const createButton = document.querySelector("#createButton");
@@ -95,7 +96,7 @@ async function createSession() {
     });
 
     session.addEventListener("contextoverflow", () => {
-      setOutput(`${outputEl.textContent}\n\nContext overflow: older conversation turns were dropped.`);
+      setOutput(`${rawOutput}\n\nContext overflow: older conversation turns were dropped.`);
       updateUsage();
     });
 
@@ -140,7 +141,7 @@ async function runPrompt({ streaming }) {
       });
 
       for await (const chunk of stream) {
-        outputEl.textContent += chunk;
+        appendOutput(chunk);
       }
     } else {
       const response = await session.prompt(prompt, {
@@ -154,7 +155,7 @@ async function runPrompt({ streaming }) {
   } catch (error) {
     if (error.name === "AbortError") {
       setStatus("Stopped");
-      setOutput(`${outputEl.textContent}\n\nPrompt stopped.`);
+      setOutput(`${rawOutput}\n\nPrompt stopped.`);
     } else {
       showError(error);
       setStatus("Prompt failed");
@@ -204,7 +205,151 @@ function setStatus(message) {
 }
 
 function setOutput(message) {
-  outputEl.textContent = message;
+  rawOutput = message;
+  outputEl.innerHTML = renderMarkdown(message);
+}
+
+function appendOutput(chunk) {
+  rawOutput += chunk;
+  outputEl.innerHTML = renderMarkdown(rawOutput);
+}
+
+function renderMarkdown(markdown) {
+  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const html = [];
+  let paragraph = [];
+  let listType = null;
+  let codeBlock = null;
+
+  const closeParagraph = () => {
+    if (!paragraph.length) {
+      return;
+    }
+
+    html.push(`<p>${renderInline(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+
+  const closeList = () => {
+    if (!listType) {
+      return;
+    }
+
+    html.push(`</${listType}>`);
+    listType = null;
+  };
+
+  for (const line of lines) {
+    const fence = line.match(/^```(\w*)\s*$/);
+
+    if (fence) {
+      if (codeBlock) {
+        html.push(
+          `<pre><code${codeBlock.language ? ` class="language-${codeBlock.language}"` : ""}>${escapeHtml(
+            codeBlock.lines.join("\n")
+          )}</code></pre>`
+        );
+        codeBlock = null;
+      } else {
+        closeParagraph();
+        closeList();
+        codeBlock = {
+          language: escapeAttribute(fence[1] || ""),
+          lines: [],
+        };
+      }
+      continue;
+    }
+
+    if (codeBlock) {
+      codeBlock.lines.push(line);
+      continue;
+    }
+
+    if (!line.trim()) {
+      closeParagraph();
+      closeList();
+      continue;
+    }
+
+    const heading = line.match(/^(#{1,6})\s+(.+)$/);
+    if (heading) {
+      closeParagraph();
+      closeList();
+      const level = heading[1].length;
+      html.push(`<h${level}>${renderInline(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    const unorderedItem = line.match(/^\s*[-*]\s+(.+)$/);
+    const orderedItem = line.match(/^\s*\d+\.\s+(.+)$/);
+
+    if (unorderedItem || orderedItem) {
+      closeParagraph();
+      const nextListType = unorderedItem ? "ul" : "ol";
+
+      if (listType !== nextListType) {
+        closeList();
+        html.push(`<${nextListType}>`);
+        listType = nextListType;
+      }
+
+      html.push(`<li>${renderInline((unorderedItem || orderedItem)[1])}</li>`);
+      continue;
+    }
+
+    closeList();
+    paragraph.push(line.trim());
+  }
+
+  if (codeBlock) {
+    html.push(
+      `<pre><code${codeBlock.language ? ` class="language-${codeBlock.language}"` : ""}>${escapeHtml(
+        codeBlock.lines.join("\n")
+      )}</code></pre>`
+    );
+  }
+
+  closeParagraph();
+  closeList();
+
+  return html.join("");
+}
+
+function renderInline(text) {
+  const codeSpans = [];
+  const codeToken = "\u0000CODE";
+
+  return escapeHtml(text)
+    .replace(/`([^`]+)`/g, (_, code) => {
+      const index = codeSpans.push(`<code>${code}</code>`) - 1;
+      return `${codeToken}${index}\u0000`;
+    })
+    .replace(
+      /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+    )
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\u0000CODE(\d+)\u0000/g, (_, index) => codeSpans[Number(index)]);
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (character) => {
+    const entities = {
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    };
+
+    return entities[character];
+  });
+}
+
+function escapeAttribute(value) {
+  return value.replace(/[^\w-]/g, "");
 }
 
 function clearError() {
