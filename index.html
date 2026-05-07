@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Chrome Prompt API Example</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <section class="panel">
+        <div class="header">
+          <div>
+            <p class="eyebrow">Chrome built-in AI</p>
+            <h1>Prompt API Example</h1>
+          </div>
+          <span id="status" class="status">Not checked</span>
+        </div>
+
+        <div class="setup">
+          <button id="checkButton" type="button">Check availability</button>
+          <button id="createButton" type="button" disabled>Create session</button>
+          <button id="destroyButton" type="button" disabled>Destroy session</button>
+        </div>
+
+        <div id="downloadWrap" class="download" hidden>
+          <div class="download-row">
+            <span>Model download</span>
+            <span id="downloadText">0%</span>
+          </div>
+          <progress id="downloadProgress" max="100" value="0"></progress>
+        </div>
+
+        <form id="promptForm" class="prompt-form">
+          <label for="promptInput">Prompt</label>
+          <textarea
+            id="promptInput"
+            rows="5"
+            placeholder="Ask Gemini Nano to summarize, classify, rewrite, or explain something."
+          >Summarize the Prompt API in three concise bullets for a web developer.</textarea>
+          <div class="actions">
+            <button id="promptButton" type="submit" disabled>Prompt</button>
+            <button id="streamButton" type="button" disabled>Stream</button>
+            <button id="stopButton" type="button" disabled>Stop</button>
+          </div>
+        </form>
+
+        <section class="output-block" aria-live="polite">
+          <div class="output-header">
+            <h2>Response</h2>
+            <span id="usage">Context: unavailable</span>
+          </div>
+          <pre id="output">Create a session, then send a prompt.</pre>
+        </section>
+
+        <p id="error" class="error" role="alert" hidden></p>
+      </section>
+    </main>
+  </body>
+</html>
